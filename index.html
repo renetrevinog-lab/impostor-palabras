@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Impostor de Palabras</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin:0; background:#0b0f17; color:#e9eef7; }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 18px; }
+    .card { background:#121a2a; border:1px solid #22304a; border-radius:16px; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    h1 { font-size: 22px; margin: 6px 0 14px; }
+    h2 { font-size: 18px; margin: 0 0 10px; }
+    p { margin: 10px 0; color:#b9c6dd; }
+    label { display:block; margin: 10px 0 6px; color:#b9c6dd; font-size: 14px; }
+    input, button, select {
+      width:100%; box-sizing:border-box;
+      padding: 12px 12px; border-radius: 12px;
+      border: 1px solid #2b3b59; background:#0f1626; color:#e9eef7;
+      font-size: 16px;
+    }
+    button { background:#2a6df4; border:none; font-weight:700; cursor:pointer; }
+    button.secondary { background:#1b263d; border:1px solid #2b3b59; }
+    button.danger { background:#e05252; }
+    .row { display:flex; gap:12px; }
+    .row > * { flex:1; }
+    .muted { color:#8ea2c7; font-size: 13px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; background:#0f1626; border:1px solid #2b3b59; color:#b9c6dd; font-size:13px; }
+    .big { font-size: 28px; font-weight: 800; letter-spacing:.5px; margin: 12px 0; }
+    .center { text-align:center; }
+    .hidden { display:none !important; }
+    .divider { height:1px; background:#22304a; margin:14px 0; }
+    .timer { font-variant-numeric: tabular-nums; }
+    .footer { margin-top: 14px; color:#7f93b8; font-size: 12px; }
+    .names { display:grid; gap:10px; margin-top: 8px; }
+    .nameItem { display:flex; gap:10px; align-items:center; }
+    .nameItem input { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="screen-setup">
+      <h1>🕵️ Impostor de Palabras (Famosos)</h1>
+      <p>Todos reciben la misma palabra… excepto el/los impostor(es).</p>
+
+      <div class="row">
+        <div>
+          <label>¿Cuántos jugadores?</label>
+          <input id="playerCount" type="number" min="3" max="20" value="6" />
+          <div class="muted">3 a 20 jugadores</div>
+        </div>
+        <div>
+          <label>Segundos visibles</label>
+          <input id="secondsVisible" type="number" min="2" max="15" value="4" />
+          <div class="muted">Se borra solo</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <label>Nombres (se generan al dar “Crear lista”)</label>
+      <button class="secondary" id="btnMakeNames">Crear lista</button>
+      <div class="names" id="namesWrap"></div>
+
+      <div class="divider"></div>
+
+      <button id="btnStart">Empezar</button>
+      <div class="footer">
+        Regla: ≤6 jugadores → 1 impostor. &nbsp; &gt;6 jugadores → 2 impostores.
+      </div>
+    </div>
+
+    <div class="card hidden" id="screen-pass">
+      <div class="center">
+        <div class="pill" id="pillInfo"></div>
+        <h2 style="margin-top:12px;">Turno de</h2>
+        <div class="big" id="currentPlayerName">—</div>
+        <p>Que nadie más vea la pantalla.</p>
+        <button id="btnReveal">Ver mi palabra</button>
+        <button class="secondary" id="btnBackToSetup" style="margin-top:10px;">Reiniciar juego</button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="screen-reveal">
+      <div class="center">
+        <div class="pill" id="pillTimer">⏳ Se borra en <span class="timer" id="timer">4</span>s</div>
+        <h2 style="margin-top:12px;">Tu rol</h2>
+        <div class="big" id="roleText">—</div>
+        <p id="roleHint" class="muted"></p>
+      </div>
+    </div>
+
+    <div class="card hidden" id="screen-done">
+      <div class="center">
+        <h2>🎉 ¡Listo para jugar!</h2>
+        <p>Hablen por turnos describiendo la palabra sin decirla literal. Voten cuando quieran.</p>
+        <button class="secondary" id="btnNewRound">Jugar otra ronda</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // =========================
+  // Palabras famosas (incluidas)
+  // =========================
+  const WORDS = [
+    // ⚽ Jugadores / Deportistas
+    "MESSI","CRISTIANO RONALDO","MBAPPÉ","NEYMAR","HAALAND",
+    "MARADONA","PELE","ZIDANE","RONALDINHO","MODRIC",
+    "LEBRON JAMES","MICHAEL JORDAN","KOBE BRYANT","STEPH CURRY",
+    "SERENA WILLIAMS","RAFA NADAL","ROGER FEDERER","NOVAK DJOKOVIC",
+
+    // 🎬 Películas / Series
+    "TITANIC","AVENGERS","STAR WARS","HARRY POTTER","JURASSIC PARK",
+    "EL PADRINO","MATRIX","INCEPTION","GLADIADOR","BATMAN",
+    "SPIDER-MAN","EL SEÑOR DE LOS ANILLOS","FAST AND FURIOUS",
+    "PIRATAS DEL CARIBE","HUNGER GAMES","GAME OF THRONES",
+    "BREAKING BAD","STRANGER THINGS",
+
+    // 🎤 Cantantes / Música
+    "BAD BUNNY","DRAKE","TAYLOR SWIFT","SHAKIRA","KAROL G",
+    "THE WEEKND","BTS","JUSTIN BIEBER","ARJONA","QUEEN",
+    "MICHAEL JACKSON","BRUNO MARS","RIHANNA","EMINEM",
+    "ADELE","ROSALIA","DUA LIPA",
+
+    // 🎮 Videojuegos / Personajes
+    "MARIO","LUIGI","ZELDA","POKEMON","PIKACHU",
+    "SONIC","FORTNITE","MINECRAFT","CALL OF DUTY",
+    "GTA","AMONG US","FIFA","GOD OF WAR","HALO",
+
+    // 🌍 Famosos / Personajes
+    "ELON MUSK","STEVE JOBS","MARK ZUCKERBERG","OPRAH",
+    "DWAYNE JOHNSON","KEANU REEVES","LEONARDO DICAPRIO",
+    "TOM CRUISE","WILL SMITH","JACKIE CHAN",
+    "HOMER SIMPSON","JOKER","IRON MAN","CAPITAN AMERICA","THANOS"
+  ];
+
+  // =========================
+  // Estado del juego
+  // =========================
+  let players = [];
+  let impostors = new Set();
+  let secretWord = "";
+  let idx = 0;
+  let seconds = 4;
+  let timerId = null;
+
+  // =========================
+  // Helpers UI
+  // =========================
+  const $ = (id) => document.getElementById(id);
+  function show(screenId) {
+    ["screen-setup","screen-pass","screen-reveal","screen-done"].forEach(s => $(s).classList.add("hidden"));
+    $(screenId).classList.remove("hidden");
+  }
+
+  function makeNameInputs() {
+    const n = clampInt($("playerCount").value, 3, 20);
+    $("playerCount").value = n;
+    const wrap = $("namesWrap");
+    wrap.innerHTML = "";
+    for (let i=0; i<n; i++) {
+      const div = document.createElement("div");
+      div.className = "nameItem";
+      const input = document.createElement("input");
+      input.placeholder = Jugador ${i+1};
+      input.value = Jugador ${i+1};
+      input.dataset.index = i;
+      div.appendChild(input);
+      wrap.appendChild(div);
+    }
+  }
+
+  function readNames() {
+    const inputs = [...$("namesWrap").querySelectorAll("input")];
+    const names = inputs.map(i => i.value.trim()).filter(Boolean);
+    // Si alguien dejó vacío, rellenamos
+    for (let i=0; i<inputs.length; i++){
+      if (!inputs[i].value.trim()) inputs[i].value = Jugador ${i+1};
+    }
+    const finalNames = inputs.map(i => i.value.trim());
+
+    // Validar duplicados
+    const set = new Set(finalNames.map(n => n.toLowerCase()));
+    if (set.size !== finalNames.length) {
+      alert("Hay nombres repetidos. Cámbialos para que todos sean distintos.");
+      return null;
+    }
+    return finalNames;
+  }
+
+  function clampInt(v, min, max) {
+    const x = parseInt(v, 10);
+    if (Number.isNaN(x)) return min;
+    return Math.max(min, Math.min(max, x));
+  }
+
+  function pickImpostors(names) {
+    const n = names.length;
+    const k = (n <= 6) ? 1 : 2;
+    const shuffled = [...names].sort(() => Math.random() - 0.5);
+    return new Set(shuffled.slice(0, k));
+  }
+
+  function startGame() {
+    const names = readNames();
+    if (!names) return;
+
+    players = names;
+    idx = 0;
+    seconds = clampInt($("secondsVisible").value, 2, 15);
+    $("secondsVisible").value = seconds;
+
+    secretWord = WORDS[Math.floor(Math.random() * WORDS.length)];
+    impostors = pickImpostors(players);
+
+    const k = impostors.size;
+    $("pillInfo").textContent = 👥 ${players.length} jugadores • 😈 ${k} impostor${k>1?"es":""};
+    $("currentPlayerName").textContent = players[idx];
+
+    show("screen-pass");
+  }
+
+  function reveal() {
+    // Mostrar rol
+    const p = players[idx];
+    const isImp = impostors.has(p);
+
+    $("roleText").textContent = isImp ? "😈 IMPOSTOR" : 🔒 ${secretWord};
+    $("roleHint").textContent = isImp
+      ? "Improvisa. Escucha descripciones y trata de no delatarte."
+      : "Describe sin decir la palabra literal.";
+
+    // Timer
+    let t = seconds;
+    $("timer").textContent = t;
+    show("screen-reveal");
+
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(() => {
+      t -= 1;
+      $("timer").textContent = t;
+      if (t <= 0) {
+        clearInterval(timerId);
+        timerId = null;
+        nextPlayer();
+      }
+    }, 1000);
+  }
+
+  function nextPlayer() {
+    // Avanzar jugador
+    idx += 1;
+    if (idx >= players.length) {
+      show("screen-done");
+      return;
+    }
+    $("currentPlayerName").textContent = players[idx];
+    show("screen-pass");
+  }
+
+  function resetAll() {
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+    players = [];
+    impostors = new Set();
+    secretWord = "";
+    idx = 0;
+    show("screen-setup");
+  }
+
+  // =========================
+  // Eventos
+  // =========================
+  $("btnMakeNames").addEventListener("click", makeNameInputs);
+  $("btnStart").addEventListener("click", startGame);
+  $("btnReveal").addEventListener("click", reveal);
+  $("btnBackToSetup").addEventListener("click", resetAll);
+  $("btnNewRound").addEventListener("click", () => {
+    // misma lista de nombres, nueva palabra / nuevos impostores
+    $("namesWrap").querySelectorAll("input").forEach((inp, i) => {
+      if (!inp.value.trim()) inp.value = Jugador ${i+1};
+    });
+    startGame();
+  });
+
+  // Inicial
+  makeNameInputs();
+</script>
+</body>
+</html>
